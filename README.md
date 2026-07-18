@@ -32,5 +32,5 @@ This application utilizes foundational software engineering practices to achieve
 
 1. **Clone the repository track to your machine:**
    ```bash
-   git clone [https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git](https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git)
-   cd YOUR_REPO_NAME
+   git clone [https://github.com/I-Elina/Chatter.git](https://github.com/I-Elina/Chatter.git)
+   cd Chatter
