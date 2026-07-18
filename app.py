@@ -4,25 +4,39 @@ import sqlite3
 import os
 
 app = Flask(__name__)
-
-# Initialize the Gemini Client
 client = genai.Client()
 
-prompt_engineering_instruction = """
-You are a strict but encouraging Python Coding Coach for university students. 
-CRITICAL RULES:
-1. NEVER give the complete code answer directly, even if the user begs or says it's urgent.
-2. If the user shares broken code, look at it, identify the exact line or concept that is wrong, and explain the logic flaw in simple English.
-3. End your response with a helpful hint or a guiding question that prompts the user to think and fix the code themselves.
-4. Keep your tone professional, warm, and highly academic.
-"""
-
 DB_FILE = "chatbot.db"
+UPLOAD_FOLDER = "uploads"
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Centralized Multi-Persona System Prompt Database
+PROMPT_DATABASE = {
+    "Python Coach": """
+    You are a strict but encouraging Python Coding Coach for university students. 
+    1. NEVER give the complete code answer directly.
+    2. Identify the exact logic flaw in simple English and end with a guiding question.
+    """,
+    "Technical Support Specialist": """
+    You are a disciplined, professional, and methodical Technical Support Specialist chatbot. 
+    Your primary goal is to help users resolve their device and software issues step-by-step.
+    1. Ask exactly ONE diagnostic question at a time. 
+    2. Never provide a multi-step solution list unless the user explicitly requests a full overview.
+    3. Always verify if the previous step worked before suggesting the next logical action.
+    """,
+    "Local Tour Guide": """
+    You are an enthusiastic, knowledgeable Local Tour Guide. Your goal is to help travelers discover hidden gems, historical spots, and cultural highlights.
+    1. Keep suggestions practical, budget-conscious, and tailored to local exploration.
+    2. Provide short, engaging historical anecdotes instead of dry facts.
+    """
+}
 
 def init_db():
-    """Connects to the database and creates the messages table if it doesn't exist."""
+    """Initializes table structure and applies safe migrations if columns are missing."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
+    
+    # 1. Base table initialization
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,56 +44,78 @@ def init_db():
             text TEXT NOT NULL
         )
     ''')
+    
+    # 2. SCHEMA MIGRATION: Check if 'persona' column exists, if not, add it dynamically
+    cursor.execute("PRAGMA table_info(messages)")
+    columns = [column[1] for column in cursor.fetchall()]
+    
+    if 'persona' not in columns:
+        # Programmatically updates older databases to include the tracking column safely
+        cursor.execute("ALTER TABLE messages ADD COLUMN persona TEXT NOT NULL DEFAULT 'Python Coach'")
+        
     conn.commit()
     conn.close()
 
-# Initialize the database file right when the web server runs
 init_db()
 
 @app.route('/')
 def home():
-    # 1. Read all previous messages from the database
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute('SELECT sender, text FROM messages ORDER BY id ASC')
-    chat_history = cursor.fetchall()
-    conn.close()
-    
-    # 2. Pass the history into our HTML page so it displays on refresh
-    return render_template('index.html', chat_history=chat_history)
+    return render_template('index.html')
 
 @app.route('/get_response', methods=['POST'])
 def get_response():
-    user_data = request.get_json()
-    user_message = user_data.get('message')
+    user_message = request.form.get('message', '')
+    active_persona = request.form.get('persona', 'Python Coach')
+    uploaded_file = request.files.get('file')
     
-    # 1. Connect to the database and save the User's message
+    system_instruction = PROMPT_DATABASE.get(active_persona, PROMPT_DATABASE["Python Coach"])
+    
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO messages (sender, text) VALUES (?, ?)', ('user', user_message))
-    conn.commit()
     
-    # 2. Fetch the full history from the database to give Gemini complete memory context
-    cursor.execute('SELECT sender, text FROM messages ORDER BY id ASC')
-    all_messages = cursor.fetchall()
+    # 1. Save user input text linked to this specific persona
+    if user_message:
+        cursor.execute('INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)', ('user', user_message, active_persona))
+        conn.commit()
     
-    # 3. Format the database history into a structure the Gemini API understands
+    # 2. FILTER LOOP: Pull history matching ONLY the current active persona
+    cursor.execute('SELECT sender, text FROM messages WHERE persona = ? ORDER BY id ASC', (active_persona,))
+    filtered_history = cursor.fetchall()
+    
+    # 3. Format text history array blocks for the SDK
     formatted_contents = []
-    for sender, text in all_messages:
+    for sender, text in filtered_history:
         role = "user" if sender == "user" else "model"
         formatted_contents.append({"role": role, "parts": [{"text": text}]})
         
-    # 4. Generate the response by passing the full history array dynamically
+    # 4. Handle file uploads using Gemini's Native File API
+    if uploaded_file and uploaded_file.filename != '':
+        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.filename)
+        uploaded_file.save(file_path)
+        
+        gemini_file = client.files.upload(file=file_path)
+        
+        if not formatted_contents or formatted_contents[-1]["role"] != "user":
+            formatted_contents.append({"role": "user", "parts": []})
+            
+        formatted_contents[-1]["parts"].append(gemini_file)
+        os.remove(file_path)
+
+    if user_message and formatted_contents and formatted_contents[-1]["role"] == "user":
+        if not any("text" in part for part in formatted_contents[-1]["parts"]):
+            formatted_contents[-1]["parts"].append({"text": user_message})
+
+    # 5. Hand the structural payload tree to Gemini
     response = client.models.generate_content(
         model="gemini-3.1-flash-lite",
         contents=formatted_contents,
-        config={"system_instruction": prompt_engineering_instruction}
+        config={"system_instruction": system_instruction}
     )
     
     ai_reply = response.text
     
-    # 5. Save the AI's reply to the database
-    cursor.execute('INSERT INTO messages (sender, text) VALUES (?, ?)', ('bot', ai_reply))
+    # 6. Save model response log linked to this specific persona
+    cursor.execute('INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)', ('bot', ai_reply, active_persona))
     conn.commit()
     conn.close()
     

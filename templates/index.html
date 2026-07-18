@@ -2,145 +2,333 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Code-Coach Chatbot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Persona AI Assistant</title>
+    <!-- Modern high-scannability typeface -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        /* Base page layout centered for laptop screen dimensions */
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            max-width: 800px; 
-            margin: 20px auto; 
-            padding: 20px; 
-            background: linear-gradient(135deg, #121212, #1a1a1a); 
-            color: #e0e0e0;
-            min-height: 90vh;
-        }
-        
-        h2 { 
-            font-size: 1.4rem; 
-            color: #ffffff; 
-            margin-bottom: 15px; 
-            text-align: center;
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
         }
 
-        /* Container adjustment to flip the layout (Input on Top) */
+        body { 
+            font-family: 'Inter', sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px; 
+            background: #0d0e12; 
+            color: #e4e4e7;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center; /* Center initial state vertically */
+            transition: justify-content 0.4s ease;
+        }
+
+        /* App container shifts smoothly when unfolding */
+        .app-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            width: 100%;
+        }
+
+        /* NEW: Welcome Banner styling sitting above the initial controls */
+        .welcome-banner {
+            text-align: center;
+            margin-bottom: 10px;
+            transition: opacity 0.3s ease, transform 0.3s ease, margin 0.3s ease;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .welcome-banner h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #ffffff;
+            margin-bottom: 8px;
+            letter-spacing: -0.025em;
+        }
+
+        .welcome-banner p {
+            font-size: 0.95rem;
+            color: #71717a;
+        }
+
+        /* Hidden state for the banner once conversation tracks begin */
+        .welcome-banner.hidden {
+            opacity: 0;
+            transform: translateY(-10px);
+            height: 0;
+            margin-bottom: 0;
+            overflow: hidden;
+        }
+
+        /* The main chat window starts completely closed with zero footprint */
         .chat-container {
             display: flex;
             flex-direction: column;
+            background: #16171d;
+            border: 1px solid #27272a;
+            border-radius: 24px;
+            padding: 0px;
+            height: 0px;
+            opacity: 0;
+            overflow: hidden;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            transition: height 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
+                        padding 0.4s ease, 
+                        opacity 0.4s ease;
         }
 
-        /* Input Area shifted to the top via flexbox ordering */
-        #input-area { 
-            display: flex; 
-            gap: 10px; 
-            margin-bottom: 15px;
-            order: 1; 
+        /* Active class triggered via JS to execute the smooth unfolding motion */
+        .chat-container.unfolded {
+            height: 480px;
+            padding: 24px;
+            opacity: 1;
+        }
+
+        #chat-window { 
+            height: 100%; 
+            overflow-y: auto; 
+            padding: 8px 4px; 
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        #chat-window::-webkit-scrollbar {
+            width: 6px;
+        }
+        #chat-window::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 10px;
+        }
+
+        /* Message bubbles with clean spacing */
+        .message { 
+            padding: 12px 18px; 
+            font-size: 0.92rem; 
+            line-height: 1.5;
+            max-width: 75%; 
+            border-radius: 18px;
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+
+        .message p {
+            margin-bottom: 8px;
+        }
+        .message p:last-child {
+            margin-bottom: 0;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .user-msg { 
+            background-color: #2b303b; 
+            color: #f4f4f5;
+            margin-left: auto; 
+            border-radius: 20px 20px 4px 20px;
+            border: 1px solid #383f4e;
+        }
+        
+        .bot-msg { 
+            background-color: #1c1d24; 
+            color: #e4e4e7;
+            margin-right: auto; 
+            border-radius: 20px 20px 20px 4px;
+            border: 1px solid #2d313f;
+        }
+
+        /* Control Frame: Groups input and selector blocks right next to each other */
+        .control-frame {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #16171d;
+            border: 1px solid #27272a;
+            border-radius: 24px;
+            padding: 16px;
+        }
+
+        .input-row {
+            display: flex;
+            gap: 12px;
         }
 
         #user-input { 
             flex-grow: 1; 
-            padding: 10px 14px; 
-            font-size: 0.9rem; 
-            background-color: #2a2a2a; 
-            border: 1px solid #3a3a3a; 
-            border-radius: 20px; 
+            padding: 14px 20px; 
+            font-size: 0.92rem; 
+            background-color: #1c1d24; 
+            border: 1px solid #2d313f; 
+            border-radius: 14px; 
             color: #ffffff;
             outline: none;
+            transition: border-color 0.2s;
+            font-family: inherit;
         }
         
-        #user-input::placeholder { color: #888888; }
-        #user-input:focus { border-color: #555555; }
+        #user-input::placeholder { color: #71717a; }
+        #user-input:focus { border-color: #4b526d; }
 
-        button { 
-            padding: 10px 20px; 
-            font-size: 0.9rem;
-            background-color: #333333; 
+        .send-btn { 
+            padding: 0 24px; 
+            font-size: 0.92rem;
+            font-weight: 500;
+            background-color: #2b303b; 
             color: #ffffff; 
-            border: 1px solid #444444; 
-            border-radius: 20px; 
+            border: 1px solid #383f4e; 
+            border-radius: 14px; 
             cursor: pointer; 
-            transition: background 0.2s;
+            transition: all 0.2s;
+            font-family: inherit;
         }
-        button:hover { background-color: #444444; }
-
-        /* Compact Chat Window positioned underneath the input */
-        #chat-window { 
-            border: 1px solid #2d2d2d; 
-            height: 450px; 
-            overflow-y: auto; 
-            padding: 15px; 
-            background-color: #161616; 
-            border-radius: 16px;
-            order: 2; 
-            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        .send-btn:hover { 
+            background-color: #383f4e;
         }
 
-        /* Message bubbles with tighter font structure and rounded edges */
-        .message { 
-            margin: 8px 0; 
-            padding: 10px 14px; 
-            font-size: 0.9rem; 
-            line-height: 1.4;
-            max-width: 75%; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        /* Modernized Selector bar positioned right under the Input field */
+        .persona-selector {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            background: #1c1d24;
+            padding: 4px;
+            border-radius: 12px;
+            border: 1px solid #2d313f;
         }
-        
-        /* Smooth slate gray for user bubbles */
-        .user-msg { 
-            background-color: #2d3748; 
-            color: #e2e8f0;
-            margin-left: auto; 
-            border-radius: 16px 16px 4px 16px;
+
+        .persona-pill {
+            background: transparent;
+            border: none;
+            color: #a1a1aa;
+            padding: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
         }
-        
-        /* Deep charcoal for chatbot responses */
-        .bot-msg { 
-            background-color: #212121; 
-            color: #e0e0e0;
-            margin-right: auto; 
-            border-radius: 16px 16px 16px 4px;
-            border: 1px solid #2d2d2d;
+
+        .persona-pill:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .persona-pill.active {
+            background: #3fdd93;
+            color: #0d0e12;
+            font-weight: 600;
+            box-shadow: 0 4px 10px rgba(63, 221, 147, 0.2);
         }
     </style>
 </head>
 <body>
-    <h2>Python Code-Coach</h2>
-    <div id="chat-window"></div>
-    
-    <div id="input-area">
-        <input type="text" id="user-input" placeholder="Ask a Python question or paste your code here...">
-        <button onclick="sendMessage()">Send</button>
+
+    <div class="app-wrapper">
+        <!-- NEW: Welcome placeholder view block -->
+        <div class="welcome-banner" id="welcome-banner-box">
+            <h1>Welcome to your AI Workspace</h1>
+            <p>Select a specialized persona below to start your conversation.</p>
+        </div>
+
+        <!-- The Chat Box starts completely folded away -->
+        <div class="chat-container" id="chat-container-box">
+            <div id="chat-window"></div>
+        </div>
+        
+        <!-- Consolidated User Controls Frame sitting natively at the core -->
+        <div class="control-frame">
+            <div class="input-row">
+                <input type="text" id="user-input" placeholder="Type your instruction or message here...">
+                <button class="send-btn" onclick="sendMessage()">Send</button>
+            </div>
+            
+            <div class="persona-selector">
+                <button class="persona-pill active" onclick="selectPersona(this, 'Python Coach')">Python Coach</button>
+                <button class="persona-pill" onclick="selectPersona(this, 'Technical Support Specialist')">Tech Support</button>
+                <button class="persona-pill" onclick="selectPersona(this, 'Local Tour Guide')">Tour Guide</button>
+            </div>
+        </div>
     </div>
 
     <script>
+        let currentPersona = "Python Coach";
+        let isUnfolded = false;
+
+        function formatMarkdown(text) {
+            let cleanHtml = text;
+            cleanHtml = cleanHtml.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            cleanHtml = cleanHtml.replace(/\n/g, '<br>');
+            return cleanHtml;
+        }
+
+        function selectPersona(element, personaName) {
+            if (currentPersona === personaName) return;
+            
+            document.querySelectorAll('.persona-pill').forEach(btn => btn.classList.remove('active'));
+            element.classList.add('active');
+            
+            currentPersona = personaName;
+            document.getElementById('chat-window').innerHTML = '';
+        }
+
         async function sendMessage() {
             const inputField = document.getElementById('user-input');
             const chatWindow = document.getElementById('chat-window');
+            const containerBox = document.getElementById('chat-container-box');
+            const welcomeBanner = document.getElementById('welcome-banner-box');
             const messageText = inputField.value.trim();
             
             if (!messageText) return;
 
-            // 1. Display user message instantly on screen
-            chatWindow.innerHTML += `<div class="message user-msg">${messageText}</div>`;
-            inputField.value = ''; // Clear text box
-            chatWindow.scrollTop = chatWindow.scrollHeight; // Scroll to bottom
+            // DYNAMIC UNFLIP: Trigger unfolding motion layout and drop welcome banner
+            if (!isUnfolded) {
+                welcomeBanner.classList.add('hidden'); // NEW: Fades out the placeholder text smoothly
+                document.body.style.justifyContent = 'flex-start';
+                document.body.style.marginTop = '40px';
+                containerBox.classList.add('unfolded');
+                isUnfolded = true;
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            chatWindow.innerHTML += `<div class="message user-msg">${formatMarkdown(messageText)}</div>`;
+            inputField.value = ''; 
+            chatWindow.scrollTop = chatWindow.scrollHeight;
 
             try {
-                // 2. Send the message to our Flask backend route via POST
+                const formData = new FormData();
+                formData.append('message', messageText);
+                formData.append('persona', currentPersona);
+
                 const response = await fetch('/get_response', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: messageText })
+                    body: formData
                 });
                 
                 const data = await response.json();
+                const parsedContent = formatMarkdown(data.reply);
                 
-                // 3. Display the AI response received from the backend
-                chatWindow.innerHTML += `<div class="message bot-msg">${data.reply}</div>`;
+                chatWindow.innerHTML += `<div class="message bot-msg">${parsedContent}</div>`;
                 chatWindow.scrollTop = chatWindow.scrollHeight;
             } catch (error) {
-                console.error("Error communicating with backend:", error);
+                console.error("Communication channel failure:", error);
+                chatWindow.innerHTML += `<div class="message bot-msg" style="color: #ef4444; border-color: #dc2626;">System Error: Failed to secure communication track.</div>`;
             }
         }
+
+        document.getElementById('user-input').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
     </script>
 </body>
 </html>
