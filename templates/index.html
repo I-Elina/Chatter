@@ -76,7 +76,7 @@
             padding: 0px;
             height: 0px;
             opacity: 0;
-            overflow: hidden;
+            overflow: visible;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             transition: height 0.5s cubic-bezier(0.25, 1, 0.5, 1), 
                         padding 0.4s ease, 
@@ -228,6 +228,61 @@
             font-weight: 600;
             box-shadow: 0 4px 10px rgba(63, 221, 147, 0.2);
         }
+        /* Modern Compact Floating Feedback Panel Container */
+        /* NEW: Positions the feedback buttons directly below the chat window content */
+        .feedback-panel {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 4px 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+            margin-top: -8px; /* Snugs it up close under the bot bubble */
+            margin-bottom: 8px;
+        }
+        .feedback-panel.visible { 
+            opacity: 1; 
+            pointer-events: auto; 
+        }
+
+        .feedback-btn {
+            background: #1c1d24;
+            border: 1px solid #2d313f;
+            color: #ffffff;
+            font-size: 0.9rem;
+            padding: 4px 10px;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .feedback-btn:hover { 
+            background: #27272a; 
+        }
+
+        /* Inline review comment box matching conventional layout */
+        .review-box-container {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            background: #1c1d24;
+            border: 1px solid #2d313f;
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            max-width: 300px;
+        }
+        .submit-review-btn {
+            background: #3fdd93;
+            color: #0d0e12;
+            border: none;
+            padding: 6px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -239,12 +294,28 @@
             <p>Select a specialized persona below to start your conversation.</p>
         </div>
 
-        <!-- The Chat Box starts completely folded away -->
+<!-- The Chat Box Container -->
         <div class="chat-container" id="chat-container-box">
-            <div id="chat-window"></div>
-        </div>
+            <div id="chat-window">
+                <!-- Chat message bubbles will render here dynamically -->
+                
+                <!-- Feedback panel sits inside the chat window, scrolling naturally -->
+                <div class="feedback-panel" id="feedback-panel-node">
+                    <span style="font-size: 0.75rem; color: #71717a;">Was this helpful?</span>
+                    <button class="feedback-btn" onclick="submitRating('👍')">👍</button>
+                    <button class="feedback-btn" onclick="showReviewBox()">👎</button>
+                </div>
+
+                <!-- Text critique box sits inside the chat window right below the buttons -->
+                <div class="review-box-container" id="review-box-node">
+                    <span style="font-size: 0.75rem; color: #a1a1aa; font-weight:500;">Help us improve:</span>
+                    <textarea id="review-text-input" placeholder="What was wrong with the answer? (Optional)"></textarea>
+                    <button class="submit-review-btn" onclick="submitRating('👎')">Submit Review</button>
+                </div>
+            </div> <!-- Closes #chat-window -->
+        </div> <!-- Closes #chat-container-box -->
         
-        <!-- Consolidated User Controls Frame sitting natively at the core -->
+        <!-- Consolidated User Controls Frame (Sits cleanly below the chat window) -->
         <div class="control-frame">
             <div class="input-row">
                 <input type="text" id="user-input" placeholder="Type your instruction or message here...">
@@ -256,12 +327,15 @@
                 <button class="persona-pill" onclick="selectPersona(this, 'Technical Support Specialist')">Tech Support</button>
                 <button class="persona-pill" onclick="selectPersona(this, 'Local Tour Guide')">Tour Guide</button>
             </div>
-        </div>
-    </div>
+        </div> <!-- Closes .control-frame -->
 
     <script>
         let currentPersona = "Python Coach";
         let isUnfolded = false;
+
+        // Dynamic client-side registers tracking only the immediate transaction loop
+        let lastUserMessageString = "";
+        let lastBotMessageString = "";
 
         function formatMarkdown(text) {
             let cleanHtml = text;
@@ -289,9 +363,14 @@
             
             if (!messageText) return;
 
-            // DYNAMIC UNFLIP: Trigger unfolding motion layout and drop welcome banner
+            // 1. TWEAK: Hide any open feedback widget from the previous message
+            hideFeedbackWidget();
+
+            // Caches the current question text into our global tracking variable
+            lastUserMessageString = messageText;
+
             if (!isUnfolded) {
-                welcomeBanner.classList.add('hidden'); // NEW: Fades out the placeholder text smoothly
+                welcomeBanner.classList.add('hidden');
                 document.body.style.justifyContent = 'flex-start';
                 document.body.style.marginTop = '40px';
                 containerBox.classList.add('unfolded');
@@ -314,10 +393,17 @@
                 });
                 
                 const data = await response.json();
-                const parsedContent = formatMarkdown(data.reply);
                 
+                // 2. TWEAK: Cache the fresh response string right as it arrives
+                lastBotMessageString = data.reply;
+                
+                const parsedContent = formatMarkdown(data.reply);
                 chatWindow.innerHTML += `<div class="message bot-msg">${parsedContent}</div>`;
                 chatWindow.scrollTop = chatWindow.scrollHeight;
+
+                // 3. TWEAK: Make the floating feedback buttons visible beside the box
+                document.getElementById('feedback-panel-node').classList.add('visible');
+
             } catch (error) {
                 console.error("Communication channel failure:", error);
                 chatWindow.innerHTML += `<div class="message bot-msg" style="color: #ef4444; border-color: #dc2626;">System Error: Failed to secure communication track.</div>`;
@@ -329,6 +415,46 @@
                 sendMessage();
             }
         });
+
+        function hideFeedbackWidget() {
+            document.getElementById('feedback-panel-node').classList.remove('visible');
+            document.getElementById('review-box-node').style.display = 'none';
+        }
+
+        function showReviewBox() {
+            document.getElementById('review-box-node').style.display = 'flex';
+        }
+
+        async function submitRating(voteType) {
+            const commentInput = document.getElementById('review-text-input');
+            const feedbackPayload = {
+                vote: voteType,
+                review: commentInput.value.trim(),
+                lastUserMessage: lastUserMessageString,
+                lastBotMessage: lastBotMessageString
+            };
+
+            try {
+                await fetch('/submit_feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(feedbackPayload)
+                });
+                
+                commentInput.value = '';
+                hideFeedbackWidget();
+                
+                // Different messages to the user for different feedback:
+                if (voteType === '👍') {
+                    alert("Glad the response was helpful. ");
+                } else {
+                    alert("Thanks for the feedback!");
+                }
+                
+            } catch (error) {
+                console.error("Failed to post anonymous evaluation:", error);
+            }
+        }
     </script>
 </body>
 </html>

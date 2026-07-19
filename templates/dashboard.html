@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Developer Feedback Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at top left, #161a24 0%, #0d0e12 60%);
+            color: #e4e4e7;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        h1 { font-size: 1.6rem; font-weight: 600; margin: 0; color: #ffffff; }
+        .back-btn {
+            background: #1c1d24;
+            border: 1px solid #2d313f;
+            color: #a1a1aa;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .back-btn:hover { color: #ffffff; background: #27272a; }
+        .card {
+            background: #16171d;
+            border: 1px solid #27272a;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        .meta-row { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; }
+        .badge { padding: 4px 10px; font-size: 0.75rem; font-weight: 600; border-radius: 20px; }
+        .badge.up { background: rgba(63, 221, 147, 0.15); color: #3fdd93; border: 1px solid rgba(63, 221, 147, 0.2); }
+        .badge.down { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); }
+        .timestamp { font-size: 0.8rem; color: #71717a; }
+        .user-comment { 
+            font-size: 0.95rem; 
+            font-weight: 500; 
+            margin-bottom: 16px; 
+            color: #ffffff;
+            background: rgba(255,255,255,0.02);
+            padding: 10px 14px;
+            border-left: 3px solid #38bdf8;
+            border-radius: 4px;
+        }
+        .context-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: #1c1d24;
+            border: 1px solid #2d313f;
+            border-radius: 12px;
+            padding: 16px;
+        }
+        .context-block { font-size: 0.85rem; }
+        .context-title { font-weight: 600; color: #71717a; margin-bottom: 6px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .context-text { color: #e4e4e7; line-height: 1.5; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <div class="header-bar">
+        <h1>📋 System Audit Ledger</h1>
+        <a href="/" class="back-btn">← Return to Chat</a>
+    </div>
+
+    {% if not reviews %}
+        <div class="card" style="text-align: center; color: #71717a; padding: 40px;">
+            No optimization feedback entries captured in the current operational cycle.
+        </div>
+    {% endif %}
+
+    {% for item in reviews %}
+        <div class="card">
+            <div class="meta-row">
+                <span class="badge {% if item.vote == '👍' %}up{% else %}down{% endif %}">
+                    {% if item.vote == '👍' %}SUCCESS LOG{% else %}OPTIMIZATION REQUIRED{% endif %}
+                </span>
+                <span class="timestamp">{{ item.time }}</span>
+            </div>
+            
+            {% if item.review %}
+                <div class="user-comment">User Notes: "{{ item.review }}"</div>
+            {% endif %}
+            
+            <div class="context-grid">
+                <div class="context-block">
+                    <div class="context-title">Target Prompt Context</div>
+                    <div class="context-text" style="color: #38bdf8;">{{ item.user_msg }}</div>
+                </div>
+                <div class="context-block" style="border-top: 1px solid #2d313f; padding-top: 12px;">
+                    <div class="context-title">System Execution Output</div>
+                    <div class="context-text">{{ item.bot_msg }}</div>
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+
+</body>
+</html>
