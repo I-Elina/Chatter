@@ -363,7 +363,7 @@
             
             if (!messageText) return;
 
-            // 1. TWEAK: Hide any open feedback widget from the previous message
+            // 1. Hide any open feedback widget from the previous message
             hideFeedbackWidget();
 
             // Caches the current question text into our global tracking variable
@@ -378,7 +378,12 @@
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
 
-            chatWindow.innerHTML += `<div class="message user-msg">${formatMarkdown(messageText)}</div>`;
+            // Append User Message
+            const userMsgDiv = document.createElement('div');
+            userMsgDiv.className = 'message user-msg';
+            userMsgDiv.innerHTML = formatMarkdown(messageText);
+            chatWindow.appendChild(userMsgDiv);
+
             inputField.value = ''; 
             chatWindow.scrollTop = chatWindow.scrollHeight;
 
@@ -394,42 +399,61 @@
                 
                 const data = await response.json();
                 
-                // 2. TWEAK: Cache the fresh response string right as it arrives
+                // Cache the fresh response string right as it arrives
                 lastBotMessageString = data.reply;
                 
-                const parsedContent = formatMarkdown(data.reply);
-                chatWindow.innerHTML += `<div class="message bot-msg">${parsedContent}</div>`;
-                chatWindow.scrollTop = chatWindow.scrollHeight;
+                // Create Bot Message Element
+                const botMsgDiv = document.createElement('div');
+                botMsgDiv.className = 'message bot-msg';
+                botMsgDiv.innerHTML = formatMarkdown(data.reply);
+                chatWindow.appendChild(botMsgDiv);
 
-                // 3. TWEAK: Make the floating feedback buttons visible beside the box
-                document.getElementById('feedback-panel-node').classList.add('visible');
+                // Shift Feedback Panel Node directly beneath this new bot message
+                const feedbackNode = document.getElementById('feedback-panel-node');
+                if (feedbackNode) {
+                    botMsgDiv.appendChild(feedbackNode);
+                    feedbackNode.classList.add('visible');
+                }
+
+                chatWindow.scrollTop = chatWindow.scrollHeight;
 
             } catch (error) {
                 console.error("Communication channel failure:", error);
-                chatWindow.innerHTML += `<div class="message bot-msg" style="color: #ef4444; border-color: #dc2626;">System Error: Failed to secure communication track.</div>`;
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'message bot-msg';
+                errorDiv.style.cssText = 'color: #ef4444; border-color: #dc2626;';
+                errorDiv.innerText = 'System Error: Failed to secure communication track.';
+                chatWindow.appendChild(errorDiv);
             }
         }
 
+        // Enter Key Listener
         document.getElementById('user-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
 
+        // Safely hide the feedback widget using the correct ID
         function hideFeedbackWidget() {
-            document.getElementById('feedback-panel-node').classList.remove('visible');
-            document.getElementById('review-box-node').style.display = 'none';
+            const widget = document.getElementById('feedback-panel-node');
+            if (widget) {
+                widget.classList.remove('visible'); // 
+            }
         }
 
         function showReviewBox() {
-            document.getElementById('review-box-node').style.display = 'flex';
+            const reviewBox = document.getElementById('review-box-node');
+            if (reviewBox) {
+                reviewBox.style.display = 'flex';
+            }
         }
 
         async function submitRating(voteType) {
             const commentInput = document.getElementById('review-text-input');
             const feedbackPayload = {
                 vote: voteType,
-                review: commentInput.value.trim(),
+                review: commentInput ? commentInput.value.trim() : '',
                 lastUserMessage: lastUserMessageString,
                 lastBotMessage: lastBotMessageString
             };
@@ -441,12 +465,11 @@
                     body: JSON.stringify(feedbackPayload)
                 });
                 
-                commentInput.value = '';
+                if (commentInput) commentInput.value = '';
                 hideFeedbackWidget();
                 
-                // Different messages to the user for different feedback:
                 if (voteType === '👍') {
-                    alert("Glad the response was helpful. ");
+                    alert("Glad the response was helpful.");
                 } else {
                     alert("Thanks for the feedback!");
                 }

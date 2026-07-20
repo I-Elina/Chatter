@@ -1,10 +1,27 @@
 from flask import Flask, render_template, request, jsonify
 from google import genai
+from dotenv import load_dotenv
+from pathlib import Path  
 import sqlite3
 import os
+import re
 
+# 1. Initialize Flask App
 app = Flask(__name__)
-client = genai.Client()
+
+# 2. Force load_dotenv to locate .env in the same folder as app.py
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(dotenv_path=BASE_DIR / '.env')
+
+# 3. Retrieve API Key safely from environment memory
+api_key = os.getenv("GEMINI_API_KEY")
+
+if not api_key:
+    raise ValueError("⚠️ GEMINI_API_KEY environment variable not detected! Check your .env file setup.")
+
+# 4. RE-INITIALIZE THE CLIENT OBJECT HERE 🟢
+client = genai.Client(api_key=api_key)
+
 
 DB_FILE = "chatbot.db"
 UPLOAD_FOLDER = "uploads"
@@ -98,78 +115,92 @@ def home():
 
 @app.route('/get_response', methods=['POST'])
 def get_response():
-    user_message = request.form.get('message', '')
+    # 1. Grab incoming text and active persona from the form submission
+    user_message = request.form.get('message', '').strip()
     active_persona = request.form.get('persona', 'Python Coach')
-    uploaded_file = request.files.get('file')
     
+    # 2. Guardrail: Prevent processing if message is completely empty
+    if not user_message:
+        return jsonify({'reply': 'Please enter a valid message.'}), 400
+
+    # 3. Fetch system instruction prompt based on persona
     system_instruction = PROMPT_DATABASE.get(active_persona, PROMPT_DATABASE["Python Coach"])
     
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    
-    # 1. Save user input text linked to this specific persona
-    if user_message:
-        cursor.execute('INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)', ('user', user_message, active_persona))
+    try:
+        # 4. Open database connection and save incoming user message
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            'INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)',
+            ('user', user_message, active_persona)
+        )
         conn.commit()
-    
-    # 2. FILTER LOOP: Pull history matching ONLY the current active persona
-    cursor.execute('SELECT sender, text FROM messages WHERE persona = ? ORDER BY id ASC', (active_persona,))
-    filtered_history = cursor.fetchall()
-    
-    # 3. Format text history array blocks for the SDK
-    formatted_contents = []
-    for sender, text in filtered_history:
-        role = "user" if sender == "user" else "model"
-        formatted_contents.append({"role": role, "parts": [{"text": text}]})
         
-    # 4. Handle file uploads using Gemini's Native File API
-    if uploaded_file and uploaded_file.filename != '':
-        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.filename)
-        uploaded_file.save(file_path)
+        # 5. Retrieve past conversation history strictly for the active persona
+        cursor.execute(
+            'SELECT sender, text FROM messages WHERE persona = ? ORDER BY id ASC',
+            (active_persona,)
+        )
+        filtered_history = cursor.fetchall()
         
-        gemini_file = client.files.upload(file=file_path)
-        
-        if not formatted_contents or formatted_contents[-1]["role"] != "user":
-            formatted_contents.append({"role": "user", "parts": []})
-            
-        formatted_contents[-1]["parts"].append(gemini_file)
-        os.remove(file_path)
+        # 6. Build the clear text history structure for Gemini
+        formatted_contents = []
+        for sender, text in filtered_history:
+            role = "user" if sender == "user" else "model"
+            formatted_contents.append({"role": role, "parts": [{"text": text}]})
 
-    if user_message and formatted_contents and formatted_contents[-1]["role"] == "user":
-        if not any("text" in part for part in formatted_contents[-1]["parts"]):
-            formatted_contents[-1]["parts"].append({"text": user_message})
+        # 7. Generate response from Gemini
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-lite",
+            contents=formatted_contents,
+            config={"system_instruction": system_instruction}
+        )
+        
+        ai_reply = response.text
+        
+        # 8. Save bot response to database and close connection
+        cursor.execute(
+            'INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)',
+            ('bot', ai_reply, active_persona)
+        )
+        conn.commit()
+        conn.close()
+        
+        # 9. Send JSON reply back to JavaScript frontend
+        return jsonify({'reply': ai_reply})
 
-    # 5. Hand the structural payload tree to Gemini
-    response = client.models.generate_content(
-        model="gemini-3.1-flash-lite",
-        contents=formatted_contents,
-        config={"system_instruction": system_instruction}
-    )
+    except Exception as e:
+        print(f"❌ Backend Error Caught: {e}")
+        return jsonify({
+            'reply': 'I encountered a temporary connection issue. Please try sending your message again!'
+        }), 500
     
-    ai_reply = response.text
-    
-    # 6. Save model response log linked to this specific persona
-    cursor.execute('INSERT INTO messages (sender, text, persona) VALUES (?, ?, ?)', ('bot', ai_reply, active_persona))
-    conn.commit()
-    conn.close()
-    
-    return jsonify({'reply': ai_reply})
 
 @app.route('/submit_feedback', methods=['POST'])
 def submit_feedback():
-    """Ingests targeted, anonymous context blocks for developer validation."""
+    """Ingests, anonymizes, and saves user evaluation blocks safely."""
     data = request.get_json()
     vote = data.get('vote')
     user_review = data.get('review', '')
     last_user = data.get('lastUserMessage', '')
     last_bot = data.get('lastBotMessage', '')
     
+    # 🛡️ PRIVACY SHIELD: Standard regex patterns to target sensitive data keys
+    # Catches variations like "School", "Academy", "University", "College", "High"
+    org_pattern = r'\b[A-Z][a-zA-Z0-9]*\s+(?:School|Academy|University|College|High|Institute)\b'
+    
+    # Replace detected organizational names with a generic placeholder
+    clean_user_message = re.sub(org_pattern, '[REDACTED_INSTITUTION]', last_user)
+    clean_user_review = re.sub(org_pattern, '[REDACTED_INSTITUTION]', user_review)
+    
+    # Connect and commit exclusively sanitized logs to localized storage
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO feedback (vote, user_review, last_user_message, last_bot_message)
         VALUES (?, ?, ?, ?)
-    ''', (vote, user_review, last_user, last_bot))
+    ''', (vote, clean_user_review, clean_user_message, last_bot))
     conn.commit()
     conn.close()
     
@@ -177,14 +208,18 @@ def submit_feedback():
 
 @app.route('/dev_dashboard')
 def dev_dashboard():
-    """Renders a simple, elegant page to review all anonymous feedback entries."""
+    # 🔒 BULLETPROOF SECURITY GATE:
+    # 1. Fetch the value, defaulting to an empty string if it isn't provided
+    developer_token = request.args.get('pass', default='')
+    
+    # 2. .strip() cuts off any accidental spaces or hidden browser characters
+    if developer_token.strip() != "admin19":
+        return "Access Denied: Administrative Clearance Required.", 403
+        
+    # If the check passes, securely extract your local audit rows
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('''
-        SELECT vote, user_review, last_user_message, last_bot_message, timestamp 
-        FROM feedback 
-        ORDER BY id DESC
-    ''')
+    cursor.execute('SELECT vote, user_review, last_user_message, last_bot_message, timestamp FROM feedback ORDER BY id DESC')
     feedback_rows = cursor.fetchall()
     conn.close()
     
