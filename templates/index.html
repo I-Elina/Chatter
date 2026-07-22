@@ -312,7 +312,18 @@
                     <textarea id="review-text-input" placeholder="What was wrong with the answer? (Optional)"></textarea>
                     <button class="submit-review-btn" onclick="submitRating('👎')">Submit Review</button>
                 </div>
-            </div> <!-- Closes #chat-window -->
+            </div>
+            
+            <div id="feedback-panel-node" class="feedback-panel">
+                <button class="feedback-btn" onclick="showReviewBox('👍')">👍</button>
+                <button class="feedback-btn" onclick="showReviewBox('👎')">👎</button>
+            </div>
+
+            <!-- Inline Review Text Field -->
+            <div id="review-box-node" class="review-box-container">
+                <input type="text" id="review-text-input" placeholder="Any suggestions? (optional)" />
+                <button class="submit-review-btn" onclick="submitRating()">Submit</button>
+            </div>
         </div> <!-- Closes #chat-container-box -->
         
         <!-- Consolidated User Controls Frame (Sits cleanly below the chat window) -->
@@ -363,7 +374,7 @@
             
             if (!messageText) return;
 
-            // 1. Hide any open feedback widget from the previous message
+            // 1. Hide the feedback widget and review box while a new message is processed
             hideFeedbackWidget();
 
             // Caches the current question text into our global tracking variable
@@ -408,10 +419,9 @@
                 botMsgDiv.innerHTML = formatMarkdown(data.reply);
                 chatWindow.appendChild(botMsgDiv);
 
-                // Shift Feedback Panel Node directly beneath this new bot message
+                // 🟢 SIMPLIFIED: Toggle visibility without moving DOM nodes!
                 const feedbackNode = document.getElementById('feedback-panel-node');
                 if (feedbackNode) {
-                    botMsgDiv.appendChild(feedbackNode);
                     feedbackNode.classList.add('visible');
                 }
 
@@ -434,11 +444,16 @@
             }
         });
 
-        // Safely hide the feedback widget using the correct ID
+        // Safely hide the feedback widget and review input box
         function hideFeedbackWidget() {
             const widget = document.getElementById('feedback-panel-node');
+            const reviewBox = document.getElementById('review-box-node');
+            
             if (widget) {
-                widget.classList.remove('visible'); // 
+                widget.classList.remove('visible');
+            }
+            if (reviewBox) {
+                reviewBox.style.display = 'none';
             }
         }
 
