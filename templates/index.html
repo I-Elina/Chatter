@@ -34,6 +34,16 @@
             gap: 20px;
             width: 100%;
         }
+        .chat-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid #2d313f;
+            font-weight: 600;
+            font-size: 1rem;
+            color: #f4f4f5;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
 
         /* NEW: Welcome Banner styling sitting above the initial controls */
         .welcome-banner {
@@ -64,6 +74,62 @@
             height: 0;
             margin-bottom: 0;
             overflow: hidden;
+        }
+
+        /* 🎨 Chatter Branding & Animations */
+
+        /* 1. Top Brand Badge */
+        .brand-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: #1c1d24;
+            border: 1px solid #2d313f;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #e4e4e7;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .brand-icon {
+            font-size: 1.1rem;
+        }
+
+        /* 2. Gradient Text Accent */
+        .highlight-text {
+            background: linear-gradient(135deg, #3fdd93, #22d3ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+
+        /* 3. Smooth Entrance Animations */
+        .fade-in-title {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+
+        .fade-in-subtitle {
+            color: #a1a1aa;
+            font-size: 1rem;
+            animation: fadeInUp 0.8s ease-out 0.2s forwards;
+            opacity: 0; /* Starts hidden until animation triggers */
+        }
+
+        /* 4. Animation Keyframes */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(16px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         /* The main chat window starts completely closed with zero footprint */
@@ -283,18 +349,59 @@
             font-weight: 600;
             cursor: pointer;
         }
+        /* 📱 Mobile Responsive Styles */
+        @media screen and (max-width: 768px) {
+            body {
+                padding: 10px; /* Reduces page margins on phone screens */
+            }
+
+            .chat-container {
+                width: 100%;       /* Takes full available screen width */
+                max-width: 100%;
+                padding: 12px;     
+            }
+
+            .chat-box {
+                height: 60vh;      
+            }
+
+            .message {
+                max-width: 88%;    
+                font-size: 0.95rem; 
+            }
+
+            .feedback-panel {
+                flex-wrap: wrap;   
+                gap: 6px;
+            }
+
+            .input-area {
+                gap: 6px;
+            }
+        }
+
     </style>
 </head>
 <body>
 
     <div class="app-wrapper">
-        <!-- NEW: Welcome placeholder view block -->
-        <div class="welcome-banner" id="welcome-banner-box">
-            <h1>Welcome to your AI Workspace</h1>
-            <p>Select a specialized persona below to start your conversation.</p>
-        </div>
+       <!-- Updated Welcome Banner inside <div id="chat-container-box"> -->
+        <div id="welcome-banner-box" class="welcome-banner">
+            <!-- Brand Symbol / Badge -->
+            <div class="brand-badge">
+                <span class="brand-icon">💬</span>
+                <span class="brand-name">Chatter</span>
+            </div>
 
-<!-- The Chat Box Container -->
+            <!-- Animated Headline -->
+            <h1 class="fade-in-title">Hello, I'm <span class="highlight-text">Chatter</span>.</h1>
+            <p class="fade-in-subtitle">Your personal AI learning assistant. Select a persona and ask me anything!</p>
+        </div>
+        <!-- Persistent Header above or inside chat-container -->
+        <div class="chat-header">
+            <span class="chat-header-title">💬 Chatter AI</span>
+        </div>
+        <!-- The Chat Box Container -->
         <div class="chat-container" id="chat-container-box">
             <div id="chat-window">
                 <!-- Chat message bubbles will render here dynamically -->
